@@ -48,7 +48,7 @@ extends PlotInterface {
   }
   def currentPenByName: String = currentPen.map(_.name).getOrElse(null)
   def currentPenByName_=(penName: String): Unit = { currentPen=(getPen(penName)) }
-  def getPen(penName: String): Option[PlotPen] = pens.find(_.name.toLowerCase==penName.toLowerCase)
+  def getPen(penName: String): Option[PlotPen] = pens.find(_.name == penName)
 
   // This only affects the UI, not headless operation, but because it is included when a plot is
   // exported, we keep it here rather than in PlotWidget, so that exporting can stay totally

@@ -95,7 +95,7 @@ class Plot private[nlogo] (var name:String) extends PlotInterface with JSerializ
 
   def currentPenByName: String = currentPen.map(_.name).getOrElse(null)
   def currentPenByName_=(penName: String): Unit = { currentPen=(getPen(penName)) }
-  def getPen(penName: String): Option[PlotPen] = pens.find(_.name.toLowerCase==penName.toLowerCase)
+  def getPen(penName: String): Option[PlotPen] = pens.find(_.name == penName)
   def defaultXMin = _defaultXMin
   def defaultXMin_=(defaultXMin: Double){
     _defaultXMin = defaultXMin

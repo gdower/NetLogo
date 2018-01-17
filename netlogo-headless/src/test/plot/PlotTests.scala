@@ -130,14 +130,19 @@ class PlotTests extends SimplePlotTest {
     // pens should come back in same order inserted
     assertResult(List("pen1", "pen2", "pen3"))(plot.pens.map(_.name))
   }
+
   testPlot("Get") { plot =>
     plot.pens = Nil
-    val pen1 = plot.createPlotPen("PEN1", false)
-    val pen2 = plot.createPlotPen("pen2", false)
-    assertResult(2)(plot.pens.size)
-    assertResult(pen1)(plot.getPen("pen1").get)
-    assertResult(pen2)(plot.getPen("PEN2").get)
-    assertResult(null)(plot.getPen("pen3").orNull)
-    assertResult(pen1)(plot.pens.head)
+    val pen1Upper = plot.createPlotPen("PEN1", false)
+    val pen1Lower = plot.createPlotPen("pen1", false)
+    val pen2      = plot.createPlotPen("pen2", false)
+    assertResult(3)(plot.pens.size)
+    assertResult(pen1Upper)(plot.getPen("PEN1").get)
+    assertResult(pen1Lower)(plot.getPen("pen1").get)
+    assertResult(pen2     )(plot.getPen("pen2").get)
+    assertResult(null     )(plot.getPen("PEN2").orNull)
+    assertResult(null     )(plot.getPen("pen3").orNull)
+    assertResult(pen1Upper)(plot.pens.head)
   }
+
 }
