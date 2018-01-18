@@ -15,6 +15,9 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
   }
 
   override def inRadius(agent: Agent, sourceSet: AgentSet, radius: Double, wrap: Boolean): JList[Agent] = {
+    val worldWidth = world.worldWidth
+    val worldHeight = world.worldHeight
+
     val result = new ArrayList[Agent]
     var startPatch: Patch = null
     var startX = .0
@@ -35,33 +38,10 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
       startY = startPatch.pycor
     }
 
-    var cachedIDs: JHashSet[Long] = null
-    if (!sourceSet.isBreedSet) {
-      cachedIDs = new JHashSet[Long](sourceSet.count)
-      val sourceTurtles = sourceSet.iterator
-      while (sourceTurtles.hasNext) {
-        val t = sourceTurtles.next()
-        cachedIDs.add(t.id)
-      }
-    } else {
-      cachedIDs = new JHashSet[Long](0)
-    }
+    val cachedIDs = initCachedIDs(sourceSet)
 
-    val regions = world.topology.getRegion(startX, startY, radius)
     val patches = new Array[Patch](world.patches.count)
-    val worldPatches = world.patches.asInstanceOf[ArrayAgentSet].array
-    var curr = 0
-    var length = 0
-    var r1 = 0
-    var r2 = 0
-
-    regions.forEach(region => {
-      r1 = region._1
-      r2 = region._2
-      length = r2 - r1
-      System.arraycopy(worldPatches, r1, patches, curr, length)
-      curr += length
-    })
+    val curr = getPatches(patches, startX, startY, radius)
 
     var i = 0
     while (i < curr) {
@@ -75,12 +55,12 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
       } else if (sourceSet.kind eq AgentKindJ.Turtle) { // Only check patches that might have turtles within the radius on them.
         // TODO fix this:
         dx = Math.abs(patch.pxcor - startX.toInt)
-        if (dx > world.worldWidth / 2)
-          dx = world.worldWidth - dx
+        if (dx > worldWidth / 2)
+          dx = worldWidth - dx
 
         dy = Math.abs(patch.pycor - startY.toInt)
-        if (dy > world.worldHeight / 2)
-          dy = world.worldHeight - dy
+        if (dy > worldHeight / 2)
+          dy = worldHeight - dy
 
         gRoot = world.rootsTable.gridRoot(dx * dx + dy * dy)
 
@@ -126,16 +106,15 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
     // copies will range from -m to +m on the x axis and -n to +n
     // on the y axis.
     if (wrap) {
-      m = if (world.wrappingAllowedInX) StrictMath.ceil(radius / worldWidth).toInt else 0
-      n = if (world.wrappingAllowedInY) StrictMath.ceil(radius / worldHeight).toInt else 0
+      if (world.wrappingAllowedInX)
+        m = StrictMath.ceil(radius / worldWidth).toInt
+
+      if (world.wrappingAllowedInY)
+        n = StrictMath.ceil(radius / worldHeight).toInt
     }
-    else {
-      // in the nonwrapping case, we don't need any world copies besides
-      // the original, so we have only one pair of offsets and both of
-      // them are 0
-      m = 0
-      n = 0
-    }
+    // in the nonwrapping case, we don't need any world copies besides
+    // the original, so we have only one pair of offsets and both of
+    // them are 0
 
     val result = new ArrayList[Agent]
     val half = angle / 2
@@ -144,33 +123,11 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
     var dx = 0
     var dy = 0
 
-    var cachedIDs: JHashSet[Long] = null
-    if (!sourceSet.isBreedSet) {
-      cachedIDs = new JHashSet[Long](sourceSet.count)
-      val sourceTurtles = sourceSet.iterator
-      while (sourceTurtles.hasNext) {
-        val t = sourceTurtles.next()
-        cachedIDs.add(t.id)
-      }
-    } else {
-      cachedIDs = new JHashSet[Long](0)
-    }
+    val cachedIDs = initCachedIDs(sourceSet)
 
-    val regions = world.topology.getRegion(startTurtle.xcor, startTurtle.ycor, radius)
     val patches = new Array[Patch](world.patches.count)
-    val worldPatches = world.patches.asInstanceOf[ArrayAgentSet].array
-    var curr = 0
-    var length = 0
-    var r1 = 0
-    var r2 = 0
+    val curr = getPatches(patches, startTurtle.xcor, startTurtle.ycor, radius)
 
-    regions.forEach(region => {
-      r1 = region._1
-      r2 = region._2
-      length = r2 - r1
-      System.arraycopy(worldPatches, r1, patches, curr, length)
-      curr += length
-    })
     // loop through the patches in the rectangle.  (it doesn't matter what
     // order we check them in.)
     var i = 0
@@ -202,12 +159,12 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
         } else {
           // TODO fix this:
           dx = Math.abs(patch.pxcor - startTurtle.xcor.toInt)
-          if (dx > world.worldWidth / 2)
-            dx = world.worldWidth - dx
+          if (dx > worldWidth / 2)
+            dx = worldWidth - dx
 
           dy = Math.abs(patch.pycor - startTurtle.ycor.toInt)
-          if (dy > world.worldHeight / 2)
-            dy = world.worldHeight - dy
+          if (dy > worldHeight / 2)
+            dy = worldHeight - dy
 
           gRoot = world.rootsTable.gridRoot(dx * dx + dy * dy)
 
@@ -241,7 +198,6 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
           }
         }
 
-
       i += 1
     }
     result
@@ -271,5 +227,42 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
     // we have to be careful here because e.g. the difference between 5 and 355
     // is 10 not 350... hence the 360 thing
     (diff <= half) || ((360 - diff) <= half)
+  }
+
+  // helper method to copy relevant patches
+  private def getPatches(patches: Array[Patch], x: Double, y: Double, r: Double): Int = {
+    val regions = world.topology.getRegion(x,y,r)
+    val worldPatches = world.patches.asInstanceOf[ArrayAgentSet].array
+    var curr = 0
+    var length = 0
+    var r1 = 0
+    var r2 = 0
+
+    regions.forEach(region => {
+      r1 = region._1
+      r2 = region._2
+      length = r2 - r1
+      System.arraycopy(worldPatches, r1, patches, curr, length)
+      curr += length
+    })
+
+    curr
+  }
+
+  // helper method to create cachedIDs set
+  private def initCachedIDs(sourceSet: AgentSet): JHashSet[Long] = {
+    var cachedIDs: JHashSet[Long] = null
+    if (!sourceSet.isBreedSet) {
+      cachedIDs = new JHashSet[Long](sourceSet.count)
+      val sourceTurtles = sourceSet.iterator
+      while (sourceTurtles.hasNext) {
+        val t = sourceTurtles.next()
+        cachedIDs.add(t.id)
+      }
+    } else {
+      cachedIDs = new JHashSet[Long](0)
+    }
+
+    cachedIDs
   }
 }
