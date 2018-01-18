@@ -3,12 +3,11 @@
 package org.nlogo.agent
 
 import org.nlogo.api.AgentException
-import org.nlogo.core.AgentKindJ
-
-import java.util.{HashSet => JHashSet, ArrayList, List => JList}
+import org.nlogo.core.AgentKind
+import java.util.{ArrayList, HashSet => JHashSet, List => JList}
 
 class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOrCone {
-  //  private val patches = null
+//  private val patches = null // TODO ? cache patches
 
   override def inRadiusSimple(agent: Agent, sourceSet: AgentSet, radius: Double, wrap: Boolean) = {
     InRadiusSimple.apply(world)(agent, sourceSet, radius, wrap)
@@ -20,11 +19,11 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
 
     val result = new ArrayList[Agent]
     var startPatch: Patch = null
-    var startX = .0
-    var startY = .0
-    var gRoot = .0
-    var dx = 0
-    var dy = 0
+    var startX: Double = .0
+    var startY: Double = .0
+    var gRoot: Double = .0
+    var dx: Int = 0
+    var dy: Int = 0
 
     // set agent coordinates
     if (agent.isInstanceOf[Turtle]) {
@@ -44,16 +43,27 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
     val curr = getPatches(patches, startX, startY, radius)
 
     var i = 0
-    while (i < curr) {
-      val patch = patches(i)
 
-      if (sourceSet.kind eq AgentKindJ.Patch) {
+    if (sourceSet.kind eq AgentKind.Patch) {
+      val sourceSetIsWorldPatches = sourceSet eq world.patches
+
+      while (i < curr) {
+        val patch = patches(i)
+
         if (world.protractor.distance(patch.pxcor, patch.pycor, startX, startY, wrap) <= radius
-          && ((sourceSet eq world.patches) || cachedIDs.contains(patch.id))) {
+          && (sourceSetIsWorldPatches || cachedIDs.contains(patch.id))) {
           result.add(patch)
         }
-      } else if (sourceSet.kind eq AgentKindJ.Turtle) { // Only check patches that might have turtles within the radius on them.
-        // TODO fix this:
+
+        i += 1
+      }
+    } else if (sourceSet.kind eq AgentKind.Turtle) {
+      val sourceSetIsWorldTurtles = sourceSet eq world.turtles
+      val sourceSetIsBreedSet = sourceSet.isBreedSet
+
+      while (i < curr) {
+        val patch = patches(i)
+
         dx = Math.abs(patch.pxcor - startX.toInt)
         if (dx > worldWidth / 2)
           dx = worldWidth - dx
@@ -72,19 +82,19 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
         // away from the patch centers in opposite directions, that makes a total
         // of square root of 2 additional distance we need to take into account.
         if (gRoot <= radius + 1.415) {
-          patch.turtlesHere.forEach(turtle => {
-            if (((sourceSet eq world.turtles)
-              || (sourceSet.isBreedSet && (sourceSet eq turtle.getBreed))
+          patch.turtlesHere.forEach({ turtle =>
+            if ((sourceSetIsWorldTurtles
+              || (sourceSetIsBreedSet && (sourceSet eq turtle.getBreed))
               || cachedIDs.contains(turtle.id))
               && (gRoot <= radius - 1.415
               || world.protractor.distance(turtle.xcor, turtle.ycor, startX, startY, wrap) <= radius))
               result.add(turtle)
           })
-
         }
+        i += 1
       }
-      i += 1
     }
+
     result
   }
 
@@ -92,6 +102,7 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
     val worldWidth = world.worldWidth
     val worldHeight = world.worldHeight
 
+    // val?
     var m = 0
     var n = 0
     // If wrap is true and the radius is large enough, the cone
@@ -117,36 +128,41 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
     // them are 0
 
     val result = new ArrayList[Agent]
-    val half = angle / 2
+    val half: Double = angle / 2
 
-    var gRoot = .0
-    var dx = 0
-    var dy = 0
+    var gRoot: Double = .0
+    var dx: Int = 0
+    var dy: Int = 0
 
     val cachedIDs = initCachedIDs(sourceSet)
 
     val patches = new Array[Patch](world.patches.count)
     val curr = getPatches(patches, startTurtle.xcor, startTurtle.ycor, radius)
 
+
+
+
     // loop through the patches in the rectangle.  (it doesn't matter what
     // order we check them in.)
+
     var i = 0
-    while (i < curr) {
-      val patch = patches(i)
-      // incone is optimized assuming a torus world making incone use the topology properly
-      // will require a significant re-write. maybe it's  candidate for optimizations
-      // for each topology.  ev 9/5/05
-      if (patch != null)
-        if (sourceSet.kind eq AgentKindJ.Patch) { // loop through our world copies
-          var worldOffsetX = -m
-          while (worldOffsetX <= m) {
+
+    if (sourceSet.kind eq AgentKind.Patch) {
+      val sourceSetIsWorldPatches = sourceSet eq world.patches
+
+      while (i < curr) {
+        val patch = patches(i)
+
+        if (patch != null) {
+          var worldOffsetX = -m // TODO ? start iteration at 0 instead
+          while (worldOffsetX <= m) { // TODO ? macro for repeated loops
             var worldOffsetY = -n
             while (worldOffsetY <= n) {
-              if (((sourceSet eq world.patches) || cachedIDs.contains(patch.id))
+              if ((sourceSetIsWorldPatches || cachedIDs.contains(patch.id))
                 && isInCone(patch.pxcor + worldWidth * worldOffsetX, patch.pycor + worldHeight * worldOffsetY, startTurtle.xcor, startTurtle.ycor, radius, half, startTurtle.heading)) {
                 result.add(patch)
 
-                // break out of while loops:
+                // break out of while loops: ? better way to do this?
                 worldOffsetX = m
                 worldOffsetY = n
               }
@@ -156,50 +172,61 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
 
             worldOffsetX += 1
           }
-        } else {
-          // TODO fix this:
-          dx = Math.abs(patch.pxcor - startTurtle.xcor.toInt)
-          if (dx > worldWidth / 2)
-            dx = worldWidth - dx
-
-          dy = Math.abs(patch.pycor - startTurtle.ycor.toInt)
-          if (dy > worldHeight / 2)
-            dy = worldHeight - dy
-
-          gRoot = world.rootsTable.gridRoot(dx * dx + dy * dy)
-
-          // Only check patches that might have turtles within the radius on them.
-          // The 1.415 (square root of 2) adjustment is necessary because it is
-          // possible for portions of a patch to be within the circle even though
-          // the center of the patch is outside the circle.  Both turtles, the
-          // turtle in the center and the turtle in the agentset, can be as much
-          // as half the square root of 2 away from its patch center.  If they're
-          // away from the patch centers in opposite directions, that makes a total
-          // of square root of 2 additional distance we need to take into account.
-          if (gRoot <= radius + 1.415) {
-            patch.turtlesHere().forEach(turtle => {
-
-              var worldOffsetX = -m
-              while (worldOffsetX <= m) {
-                var worldOffsetY = -n
-                while (worldOffsetY <= n) { // any turtle set with a non-null print name is either
-                  // the set of all turtles, or a breed agentset - ST 2/19/04
-                  if (((sourceSet eq world.turtles) || (sourceSet.isBreedSet && (sourceSet eq turtle.getBreed)) || cachedIDs.contains(turtle.id)) && isInCone(turtle.xcor + worldWidth * worldOffsetX, turtle.ycor + worldHeight * worldOffsetY, startTurtle.xcor, startTurtle.ycor, radius, half, startTurtle.heading)) {
-                    result.add(turtle)
-                    // break out of while loops:
-                    worldOffsetX = m
-                    worldOffsetY = n
-                  }
-                  worldOffsetY += 1
-                }
-                worldOffsetX += 1
-              }
-            })
-          }
         }
+        i += 1
+      }
+    } else {
+      val sourceSetIsWorldTurtles = sourceSet eq world.turtles
+      val sourceSetIsBreedSet = sourceSet.isBreedSet
 
-      i += 1
+      while (i < curr) {
+        val patch = patches(i)
+
+        dx = Math.abs(patch.pxcor - startTurtle.xcor.toInt)
+        if (dx > worldWidth / 2)
+          dx = worldWidth - dx
+
+        dy = Math.abs(patch.pycor - startTurtle.ycor.toInt)
+        if (dy > worldHeight / 2)
+          dy = worldHeight - dy
+
+        gRoot = world.rootsTable.gridRoot(dx * dx + dy * dy)
+
+        // Only check patches that might have turtles within the radius on them.
+        // The 1.415 (square root of 2) adjustment is necessary because it is
+        // possible for portions of a patch to be within the circle even though
+        // the center of the patch is outside the circle.  Both turtles, the
+        // turtle in the center and the turtle in the agentset, can be as much
+        // as half the square root of 2 away from its patch center.  If they're
+        // away from the patch centers in opposite directions, that makes a total
+        // of square root of 2 additional distance we need to take into account.
+        if (gRoot <= radius + 1.415) {
+          patch.turtlesHere().forEach({ turtle =>
+
+            var worldOffsetX = -m
+            while (worldOffsetX <= m) {
+              var worldOffsetY = -n
+              while (worldOffsetY <= n) { // any turtle set with a non-null print name is either
+                // the set of all turtles, or a breed agentset - ST 2/19/04
+                if ((sourceSetIsWorldTurtles || (sourceSetIsBreedSet && (sourceSet eq turtle.getBreed))
+                  || cachedIDs.contains(turtle.id))
+                  && isInCone(turtle.xcor + worldWidth * worldOffsetX, turtle.ycor + worldHeight * worldOffsetY, startTurtle.xcor, startTurtle.ycor, radius, half, startTurtle.heading)) {
+                  result.add(turtle)
+
+                  // break out of while loops:
+                  worldOffsetX = m
+                  worldOffsetY = n
+                }
+                worldOffsetY += 1
+              }
+              worldOffsetX += 1
+            }
+          })
+        }
+        i += 1
+      }
     }
+
     result
   }
 
@@ -231,14 +258,14 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
 
   // helper method to copy relevant patches
   private def getPatches(patches: Array[Patch], x: Double, y: Double, r: Double): Int = {
-    val regions = world.topology.getRegion(x,y,r)
+    val regions = world.topology.getRegion(x,y,r) // TODO compute # of patches, curr would eq array size
     val worldPatches = world.patches.asInstanceOf[ArrayAgentSet].array
     var curr = 0
     var length = 0
     var r1 = 0
     var r2 = 0
 
-    regions.forEach(region => {
+    regions.forEach({ region => // TODO ? how fast is foreach on ArrayList?
       r1 = region._1
       r2 = region._2
       length = r2 - r1
