@@ -7,7 +7,8 @@ import org.nlogo.core.AgentKind
 import java.util.{ArrayList, HashSet => JHashSet, List => JList}
 
 class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOrCone {
-//  private val patches = null // TODO ? cache patches
+  private var patches: Array[Patch] = null // world.patches is not defined when this class is initiated
+  private var end: Int = 0
 
   override def inRadiusSimple(agent: Agent, sourceSet: AgentSet, radius: Double, wrap: Boolean) = {
     InRadiusSimple.apply(world)(agent, sourceSet, radius, wrap)
@@ -38,14 +39,14 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
     }
 
     val cachedIDs = initCachedIDs(sourceSet)
-    val patches = getPatches(startX, startY, radius)
+    setPatches(startX, startY, radius)
 
     var i = 0
 
     if (sourceSet.kind eq AgentKind.Patch) {
       val sourceSetIsWorldPatches = sourceSet eq world.patches
 
-      while (i < patches.length) {
+      while (i < end) {
         val patch = patches(i)
 
         if (world.protractor.distance(patch.pxcor, patch.pycor, startX, startY, wrap) <= radius
@@ -59,7 +60,7 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
       val sourceSetIsWorldTurtles = sourceSet eq world.turtles
       val sourceSetIsBreedSet = sourceSet.isBreedSet
 
-      while (i < patches.length) {
+      while (i < end) {
         val patch = patches(i)
 
         dx = Math.abs(patch.pxcor - startX.toInt)
@@ -133,14 +134,14 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
     var dy: Int = 0
 
     val cachedIDs = initCachedIDs(sourceSet)
-    val patches = getPatches(startTurtle.xcor, startTurtle.ycor, radius)
+    setPatches(startTurtle.xcor, startTurtle.ycor, radius)
 
     var i = 0
 
     if (sourceSet.kind eq AgentKind.Patch) {
       val sourceSetIsWorldPatches = sourceSet eq world.patches
 
-      while (i < patches.length) {
+      while (i < end) {
         val patch = patches(i)
 
         if (patch != null) {
@@ -171,7 +172,7 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
       val sourceSetIsWorldTurtles = sourceSet eq world.turtles
       val sourceSetIsBreedSet = sourceSet.isBreedSet
 
-      while (i < patches.length) {
+      while (i < end) {
         val patch = patches(i)
 
         dx = Math.abs(patch.pxcor - startTurtle.xcor.toInt)
@@ -249,13 +250,19 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
   }
 
   // helper method to copy relevant patches
-  private def getPatches(x: Double, y: Double, r: Double): Array[Patch] = {
+  private def setPatches(X: Double, Y: Double, R: Double): Unit = {
+    val x = X.toInt
+    val y = Y.toInt
+    val r = if (x != X || y != Y) R.toInt + 1 else R.toInt
+
     val regions = world.topology.getRegion(x,y,r) 
 
     var count = 0
     regions.forEach(region => count += region._2 - region._1)
 
-    val patches = new Array[Patch](count)
+    if (patches eq null) {
+      patches = new Array[Patch](world.patches.count)
+    }
 
     val worldPatches = world.patches.asInstanceOf[ArrayAgentSet].array
     var curr = 0
@@ -271,7 +278,7 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
       curr += length
     })
 
-    patches
+    end = curr
   }
 
   // helper method to create cachedIDs set

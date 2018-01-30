@@ -121,11 +121,11 @@ extends Neighbors {
   // 3. x-r < 0
   // 4. x+r >= w
   
-  def getRegion(X: Double, Y: Double, R: Double): ArrayList[(Int, Int)] = {
+  def getRegion(X: Int, Y: Int, R: Int): ArrayList[(Int, Int)] = {
 
-    val x: Int = X.toInt - world.minPxcor
-    val y: Int = world.worldHeight - 1 - (Y.toInt - world.minPycor)
-    val r: Int = if (X.toInt != X || Y.toInt != Y) R.toInt + 1 else R.toInt
+    val x: Int = X - world.minPxcor
+    val y: Int = world.worldHeight - 1 - (Y - world.minPycor)
+    val r: Int = R
 
     val ans: ArrayList[(Int, Int)] = new ArrayList()
     val a = Array((-1, -1), (-1, -1)) // at most 2 possible disjoint y ranges
