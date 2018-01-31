@@ -136,7 +136,21 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
     val cachedIDs = initCachedIDs(sourceSet)
     setPatches(startTurtle.xcor, startTurtle.ycor, radius)
 
-    var i = 0
+    // create and filter world offsets based on startTurtle position
+    val offsets = new ArrayList[(Int, Int)]
+    var offsetX = -m
+    while (offsetX <= m) {
+      var offsetY = -n
+      while (offsetY <= n) {
+        if (closestPointIsInRadius(startTurtle.xcor, startTurtle.ycor, offsetX, offsetY, radius)) {
+          offsets.add((offsetX, offsetY))
+        }
+        offsetY += 1
+      }
+      offsetX += 1
+    }
+
+    var i = 0 // index patches
 
     if (sourceSet.kind eq AgentKind.Patch) {
       val sourceSetIsWorldPatches = sourceSet eq world.patches
@@ -147,23 +161,19 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
         if (patch != null) {
           // loop through the patches in the rectangle.  (it doesn't matter what
           // order we check them in.)
-          var worldOffsetX = -m // TODO ? start iteration at 0 instead
-          while (worldOffsetX <= m) { // TODO ? macro for repeated loops
-            var worldOffsetY = -n
-            while (worldOffsetY <= n) {
-              if ((sourceSetIsWorldPatches || cachedIDs.contains(patch.id))
-                && isInCone(patch.pxcor + worldWidth * worldOffsetX, patch.pycor + worldHeight * worldOffsetY, startTurtle.xcor, startTurtle.ycor, radius, half, startTurtle.heading)) {
-                result.add(patch)
 
-                // break out of while loops: ? better way to do this?
-                worldOffsetX = m
-                worldOffsetY = n
-              }
+          var j = 0 // index offsets
+          var break = false
+          while (!break && j < offsets.size()) {
+            val worldOffsetXY = offsets.get(j)
 
-              worldOffsetY += 1
+            if ((sourceSetIsWorldPatches || cachedIDs.contains(patch.id))
+              && isInCone(patch.pxcor + worldWidth * worldOffsetXY._1, patch.pycor + worldHeight * worldOffsetXY._2, startTurtle.xcor, startTurtle.ycor, radius, half, startTurtle.heading)) {
+              result.add(patch)
+              break = true
             }
 
-            worldOffsetX += 1
+            j += 1
           }
         }
         i += 1
@@ -195,24 +205,19 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
         // of square root of 2 additional distance we need to take into account.
         if (gRoot <= radius + 1.415) {
           patch.turtlesHere().forEach({ turtle =>
+            var j = 0 // index offsets
+            var break = false
+            while (!break && j < offsets.size()) {
+              val worldOffsetXY = offsets.get(j)
 
-            var worldOffsetX = -m
-            while (worldOffsetX <= m) {
-              var worldOffsetY = -n
-              while (worldOffsetY <= n) { // any turtle set with a non-null print name is either
-                // the set of all turtles, or a breed agentset - ST 2/19/04
-                if ((sourceSetIsWorldTurtles || (sourceSetIsBreedSet && (sourceSet eq turtle.getBreed))
-                  || cachedIDs.contains(turtle.id))
-                  && isInCone(turtle.xcor + worldWidth * worldOffsetX, turtle.ycor + worldHeight * worldOffsetY, startTurtle.xcor, startTurtle.ycor, radius, half, startTurtle.heading)) {
-                  result.add(turtle)
-
-                  // break out of while loops:
-                  worldOffsetX = m
-                  worldOffsetY = n
-                }
-                worldOffsetY += 1
+              if ((sourceSetIsWorldTurtles || (sourceSetIsBreedSet && (sourceSet eq turtle.getBreed))
+                || cachedIDs.contains(turtle.id))
+                && isInCone(turtle.xcor + worldWidth * worldOffsetXY._1, turtle.ycor + worldHeight * worldOffsetXY._2, startTurtle.xcor, startTurtle.ycor, radius, half, startTurtle.heading)) {
+                result.add(turtle)
+                break = true
               }
-              worldOffsetX += 1
+
+              j += 1
             }
           })
         }
@@ -221,6 +226,39 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
     }
 
     result
+  }
+
+  private def closestPointIsInRadius(x: Double, y: Double, offsetX: Int, offsetY: Int, r: Double): Boolean = {
+    var closestX = .0
+    var closestY = .0
+
+    // world offset is below current world
+    if (offsetY < 0) {
+      closestY = world.maxPycor + (offsetY * world.worldHeight)
+
+    // world offset is above current world
+    } else if (offsetY > 0) {
+      closestY = world.minPycor + (offsetY * world.worldHeight)
+
+    // world offset is in the same horizontal as current world
+    } else {
+      closestY = y
+    }
+
+    // world offset is to the left of current world
+    if (offsetX < 0) {
+      closestX = world.maxPxcor + (offsetX * world.worldWidth)
+
+    // world offset is to the right of current world
+    } else if (offsetX > 0) {
+      closestX = world.minPxcor + (offsetX * world.worldWidth)
+
+    // world offset is in the same vertical as current world
+    } else {
+      closestX = x
+    }
+
+    world.protractor.distance(closestX, closestY, x, y, false) <= r
   }
 
   // helper method for inCone().
