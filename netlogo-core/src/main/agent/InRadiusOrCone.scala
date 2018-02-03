@@ -15,25 +15,19 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
   }
 
   override def inRadius(agent: Agent, sourceSet: AgentSet, radius: Double, wrap: Boolean): JList[Agent] = {
-    val worldWidth = world.worldWidth
-    val worldHeight = world.worldHeight
-
+    val (worldWidth, worldHeight) = (world.worldWidth, world.worldHeight)
     val result = new ArrayList[Agent]
-    var startPatch: Patch = null
-    var startX: Double = .0
-    var startY: Double = .0
-    var gRoot: Double = .0
-    var dx: Int = 0
-    var dy: Int = 0
+    var startX, startY, gRoot = .0
+    var dx, dy, i = 0
 
-    // set agent coordinates
+    // set agent coordinates startX and startY
     if (agent.isInstanceOf[Turtle]) {
       val startTurtle = agent.asInstanceOf[Turtle]
       startX = startTurtle.xcor
       startY = startTurtle.ycor
     }
     else {
-      startPatch = agent.asInstanceOf[Patch]
+      val startPatch = agent.asInstanceOf[Patch]
       startX = startPatch.pxcor
       startY = startPatch.pycor
     }
@@ -41,16 +35,14 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
     val cachedIDs = initCachedIDs(sourceSet)
     setPatches(startX, startY, radius)
 
-    var i = 0
-
     if (sourceSet.kind eq AgentKind.Patch) {
       val sourceSetIsWorldPatches = sourceSet eq world.patches
 
       while (i < end) {
         val patch = patches(i)
 
-        if (world.protractor.distance(patch.pxcor, patch.pycor, startX, startY, wrap) <= radius
-          && (sourceSetIsWorldPatches || cachedIDs.contains(patch.id))) {
+        if ((sourceSetIsWorldPatches || cachedIDs.contains(patch.id))
+            && world.protractor.distance(patch.pxcor, patch.pycor, startX, startY, wrap) <= radius) {
           result.add(patch)
         }
 
@@ -81,14 +73,16 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
         // away from the patch centers in opposite directions, that makes a total
         // of square root of 2 additional distance we need to take into account.
         if (gRoot <= radius + 1.415) {
-          patch.turtlesHere.forEach({ turtle =>
+          val turtleIterator = patch.turtlesHere.iterator
+          while (turtleIterator.hasNext) {
+            val turtle = turtleIterator.next()
             if ((sourceSetIsWorldTurtles
               || (sourceSetIsBreedSet && (sourceSet eq turtle.getBreed))
               || cachedIDs.contains(turtle.id))
               && (gRoot <= radius - 1.415
               || world.protractor.distance(turtle.xcor, turtle.ycor, startX, startY, wrap) <= radius))
               result.add(turtle)
-          })
+          }
         }
         i += 1
       }
@@ -98,12 +92,8 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
   }
 
   override def inCone(startTurtle: Turtle, sourceSet: AgentSet, radius: Double, angle: Double, wrap: Boolean): JList[Agent] = {
-    val worldWidth = world.worldWidth
-    val worldHeight = world.worldHeight
-
-    // val?
-    var m = 0
-    var n = 0
+    val (worldWidth, worldHeight) = (world.worldWidth, world.worldHeight)
+    var m, n = 0
     // If wrap is true and the radius is large enough, the cone
     // may wrap around the edges of the world.  We handle this by
     // enlarging the coordinate system in which we search beyond
@@ -128,29 +118,26 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
 
     val result = new ArrayList[Agent]
     val half: Double = angle / 2
-
     var gRoot: Double = .0
-    var dx: Int = 0
-    var dy: Int = 0
+    var dx, dy, i = 0
 
     val cachedIDs = initCachedIDs(sourceSet)
     setPatches(startTurtle.xcor, startTurtle.ycor, radius)
 
-    // create and filter world offsets based on startTurtle position
+    // create and filter world offsets based on startTurtle position.
+    // x offset from -m to m and y offset from -n to n.
     val offsets = new ArrayList[(Int, Int)]
-    var offsetX = -m
-    while (offsetX <= m) {
-      var offsetY = -n
-      while (offsetY <= n) {
-        if (closestPointIsInRadius(startTurtle.xcor, startTurtle.ycor, offsetX, offsetY, radius)) {
-          offsets.add((offsetX, offsetY))
+    var x = -m
+    while (x <= m) {
+      var y = -n
+      while (y <= n) {
+        if (closestPointIsInRadius(startTurtle.xcor, startTurtle.ycor, x, y, radius)) {
+          offsets.add((x, y))
         }
-        offsetY += 1
+        y += 1
       }
-      offsetX += 1
+      x += 1
     }
-
-    var i = 0 // index patches
 
     if (sourceSet.kind eq AgentKind.Patch) {
       val sourceSetIsWorldPatches = sourceSet eq world.patches
@@ -161,19 +148,16 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
         if (patch != null) {
           // loop through the patches in the rectangle.  (it doesn't matter what
           // order we check them in.)
-
-          var j = 0 // index offsets
-          var break = false
-          while (!break && j < offsets.size()) {
-            val worldOffsetXY = offsets.get(j)
+          val offsetIterator = offsets.iterator
+          var found = false
+          while (!found && offsetIterator.hasNext) {
+            val (offsetX, offsetY) = offsetIterator.next()
 
             if ((sourceSetIsWorldPatches || cachedIDs.contains(patch.id))
-              && isInCone(patch.pxcor + worldWidth * worldOffsetXY._1, patch.pycor + worldHeight * worldOffsetXY._2, startTurtle.xcor, startTurtle.ycor, radius, half, startTurtle.heading)) {
+              && isInCone(patch.pxcor + worldWidth * offsetX, patch.pycor + worldHeight * offsetY, startTurtle.xcor, startTurtle.ycor, radius, half, startTurtle.heading)) {
               result.add(patch)
-              break = true
+              found = true
             }
-
-            j += 1
           }
         }
         i += 1
@@ -204,22 +188,22 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
         // away from the patch centers in opposite directions, that makes a total
         // of square root of 2 additional distance we need to take into account.
         if (gRoot <= radius + 1.415) {
-          patch.turtlesHere().forEach({ turtle =>
-            var j = 0 // index offsets
-            var break = false
-            while (!break && j < offsets.size()) {
-              val worldOffsetXY = offsets.get(j)
+          val turtleIterator = patch.turtlesHere.iterator
+          while (turtleIterator.hasNext) {
+            val turtle = turtleIterator.next()
 
+            var found = false
+            val offsetIterator = offsets.iterator
+            while (!found && offsetIterator.hasNext) {
+              val (offsetX, offsetY) = offsetIterator.next()
               if ((sourceSetIsWorldTurtles || (sourceSetIsBreedSet && (sourceSet eq turtle.getBreed))
                 || cachedIDs.contains(turtle.id))
-                && isInCone(turtle.xcor + worldWidth * worldOffsetXY._1, turtle.ycor + worldHeight * worldOffsetXY._2, startTurtle.xcor, startTurtle.ycor, radius, half, startTurtle.heading)) {
+                && isInCone(turtle.xcor + worldWidth * offsetX, turtle.ycor + worldHeight * offsetY, startTurtle.xcor, startTurtle.ycor, radius, half, startTurtle.heading)) {
                 result.add(turtle)
-                break = true
+                found = true
               }
-
-              j += 1
             }
-          })
+          }
         }
         i += 1
       }
@@ -228,33 +212,25 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
     result
   }
 
+  // helper method for inCone()
+  // for each world W at offsets offsetX and offsetY, check if any point
+  // in W is within radius by checking W's closest point
   private def closestPointIsInRadius(x: Double, y: Double, offsetX: Int, offsetY: Int, r: Double): Boolean = {
-    var closestX = .0
-    var closestY = .0
+    var closestX, closestY = .0
 
-    // world offset is below current world
-    if (offsetY < 0) {
+    if (offsetY < 0) { // below current world
       closestY = world.maxPycor + (offsetY * world.worldHeight)
-
-    // world offset is above current world
-    } else if (offsetY > 0) {
+    } else if (offsetY > 0) { // above current world
       closestY = world.minPycor + (offsetY * world.worldHeight)
-
-    // world offset is in the same horizontal as current world
-    } else {
+    } else { // same horizontal as current world
       closestY = y
     }
 
-    // world offset is to the left of current world
-    if (offsetX < 0) {
+    if (offsetX < 0) { // left of current world
       closestX = world.maxPxcor + (offsetX * world.worldWidth)
-
-    // world offset is to the right of current world
-    } else if (offsetX > 0) {
+    } else if (offsetX > 0) { //right of current world
       closestX = world.minPxcor + (offsetX * world.worldWidth)
-
-    // world offset is in the same vertical as current world
-    } else {
+    } else { // same vertical as current world
       closestX = x
     }
 
@@ -293,28 +269,24 @@ class InRadiusOrCone private[agent](val world: World2D) extends World.InRadiusOr
     val y = Y.toInt
     val r = if (x != X || y != Y) R.toInt + 1 else R.toInt
 
-    val regions = world.topology.getRegion(x,y,r) 
+    val regionIterator = world.topology.getRegion(x,y,r).iterator
 
-    var count = 0
-    regions.forEach(region => count += region._2 - region._1)
+    var curr = 0
 
+    // initialize patches only once for this class.
     if (patches eq null) {
       patches = new Array[Patch](world.patches.count)
     }
 
     val worldPatches = world.patches.asInstanceOf[ArrayAgentSet].array
-    var curr = 0
-    var length = 0
-    var r1 = 0
-    var r2 = 0
 
-    regions.forEach({ region => // TODO ? how fast is foreach on ArrayList?
-      r1 = region._1
-      r2 = region._2
-      length = r2 - r1
+    while (regionIterator.hasNext) {
+      val region = regionIterator.next()
+      val (r1, r2) = (region._1, region._2)
+      val length = r2 - r1
       System.arraycopy(worldPatches, r1, patches, curr, length)
       curr += length
-    })
+    }
 
     end = curr
   }
